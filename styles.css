@@ -195,6 +195,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   font-weight: 700;
   vertical-align: middle;
 }
+.pill.hol { background: var(--ot); }
 
 /* ---------- Navigation semaine / mois ---------- */
 
@@ -234,9 +235,27 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 }
 .ot small { color: #8a4a1f; font-size: 0.85rem; }
 .ot.none { background: var(--bg); color: var(--muted); }
+.ot small.warn { margin-top: 4px; color: var(--danger); font-weight: 700; }
+.extras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.extra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  background: #eef0fb;
+  color: #3b3f8f;
+  font-size: 0.8rem;
+}
+.extra strong { font-size: 1rem; color: var(--text); }
+.note-line { display: block; margin-top: 8px; color: var(--muted); font-size: 0.8rem; }
 .salary { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .salary-big { font-size: 1.6rem; font-weight: 800; }
 .salary small { display: block; color: var(--muted); font-size: 0.8rem; }
+.pay-lines { list-style: none; margin: 8px 0; padding: 0; text-align: start; font-size: 0.88rem; }
+.pay-lines li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+.pay-lines li:last-child { border-bottom: 0; }
+.pay-lines strong { white-space: nowrap; }
 
 /* ---------- Jours ---------- */
 
@@ -310,6 +329,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .cal-c.blank { background: transparent; }
 .cal-c.has { background: var(--primary-soft); }
 .cal-c.today { outline: 2px solid var(--primary); }
+.cal-c.hol .cal-d { color: var(--ot); text-decoration: underline; }
 .cal-d { font-weight: 700; font-size: 0.95rem; }
 .cal-v { font-size: 0.72rem; font-weight: 700; color: var(--primary); white-space: nowrap; }
 
@@ -350,6 +370,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   font-size: 1rem;
 }
 .field input:focus, .field select:focus { border-color: var(--primary); outline: none; }
+.field input:disabled { background: var(--bg); color: var(--muted); }
 .inline { display: flex; gap: 8px; }
 .inline input { flex: 1; }
 .inline select { flex: 1.3; }

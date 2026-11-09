@@ -24,14 +24,20 @@ Les heures d'octobre 2026 (101h30) et du début de novembre 2026 (12h) sont déj
 
 L'icône « ساعات العمل » apparaît alors sur l'écran d'accueil, comme une vraie appli.
 
-## Calcul des heures supp
+## Calculs
 
-Réglages par défaut (modifiables dans **Réglages**) :
+Réglages par défaut (tous modifiables dans **Réglages**), d'après le contrat et la convention collective de la propreté :
 
-- contrat de **24 h par semaine** (ou un nombre d'heures par mois) ;
-- au-delà du contrat, les heures jusqu'à **1/10 du contrat** (2h24 pour 24 h) sont majorées de **10 %**, les suivantes de **25 %** ;
+- contrat de **18h15 par semaine**, soit **79 h par mois** ;
+- **heures supp** (heures complémentaires) : chaque semaine, les heures au-delà du contrat ; jusqu'à **1/10 du contrat** (1h50) à **+10 %**, au-delà à **+25 %** ;
+- l'appli signale une semaine qui dépasse la **limite de 1/3 du contrat** (6h05 d'heures supp) ;
 - une semaine à cheval sur deux mois compte dans le mois où elle se termine (le dimanche) ;
-- le salaire est une **estimation brute** : heures × taux horaire + majorations des heures supp.
+- **nuit** (21h → 6h) : **+20 %**, et repos compensateur de 2 % des heures de nuit ;
+- **dimanche** prévu au planning : **+25 %** (+100 % s'il est exceptionnel) ;
+- **jour férié** prévu : **+50 %** (+100 % s'il est exceptionnel) ; un dimanche férié compte seulement comme férié ;
+- **salaire brut estimé** : salaire de base du mois + heures supp avec leur majoration + majorations de nuit, du dimanche et des jours fériés. Sans salaire de base, l'appli fait heures × taux horaire.
+
+Le salaire n'est pas écrit dans le code : il se remplit dans **Réglages** et reste sur le téléphone.
 
 ## Où sont les données ?
 

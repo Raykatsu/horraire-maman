@@ -129,10 +129,10 @@
     const boxH = 30 + sumRows * 48;
     rect(M, y, W - 2 * M, boxH, COLORS.box);
     let yy = y + 15 + 24;
-    rep.summary.forEach((r, i) => {
-      const color = i > 0 && r.min > 0 ? COLORS.ot : COLORS.text;
-      textStart(r.label, M + 24, yy, 640, font(26, i === 0 ? 700 : 400));
-      textEnd(I.dur(r.min) + '   (' + I.num(C2(r.min)) + ')', W - M - 24, yy, 380, font(26, i === 0 ? 700 : 400), color);
+    rep.summary.forEach((r) => {
+      const color = r.ot && r.min > 0 ? COLORS.ot : COLORS.text;
+      textStart(r.label, M + 24, yy, 640, font(26, r.strong ? 700 : 400));
+      textEnd(I.dur(r.min) + '   (' + I.num(C2(r.min)) + ')', W - M - 24, yy, 380, font(26, r.strong ? 700 : 400), color);
       yy += 48;
     });
     rep.money.forEach((m) => {

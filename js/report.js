@@ -49,16 +49,19 @@
         counted: w.counted,
       }));
 
-    const summary = [
-      { label: I.t('xTotal'), min: sum.total },
-      { label: I.t('xOt1', { p: p1 }), min: sum.ot.t1 },
-      { label: I.t('xOt2', { p: p2 }), min: sum.ot.t2 },
-    ];
+    const summary = [{ label: I.t('xTotal'), min: sum.total, strong: true }];
+    if (sum.contractMonth > 0) summary.push({ label: I.t('xContractMonth'), min: sum.contractMonth });
+    summary.push(
+      { label: I.t('xOt1', { p: p1 }), min: sum.ot.t1, ot: true },
+      { label: I.t('xOt2', { p: p2 }), min: sum.ot.t2, ot: true },
+      { label: I.t('nightHours'), min: sum.night },
+      { label: I.t('sundayHours'), min: sum.sunday },
+      { label: I.t('holidayHours'), min: sum.holiday }
+    );
     const money = [];
     if (sum.pay) {
-      money.push({ label: I.t('xRate'), value: sum.pay.rate });
-      money.push({ label: I.t('xBase'), value: sum.pay.base });
-      money.push({ label: I.t('xMaj'), value: C.round2(sum.pay.maj1 + sum.pay.maj2) });
+      money.push({ label: I.t('xRate'), value: C.round2(sum.pay.rate) });
+      sum.pay.lines.forEach((l) => money.push({ label: I.t('payLine_' + l.key, { p: l.pct, h: I.dur(l.min) }), value: l.amount }));
       money.push({ label: I.t('xSalary'), value: sum.pay.total, strong: true });
     }
 
@@ -88,7 +91,7 @@
 
     // Résumé du mois
     rows.push([{ v: I.t('xSummary'), s: 'bold' }]);
-    rep.summary.forEach((r, i) => rows.push([r.label, { v: dec(r.min), s: i === 0 ? 'decBold' : 'dec' }, I.dur(r.min)]));
+    rep.summary.forEach((r) => rows.push([r.label, { v: dec(r.min), s: r.strong ? 'decBold' : 'dec' }, I.dur(r.min)]));
     rep.money.forEach((m) => rows.push([m.label, { v: m.value, s: m.strong ? 'moneyBold' : 'money' }]));
     rows.push([]);
 

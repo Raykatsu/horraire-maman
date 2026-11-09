@@ -76,6 +76,96 @@
     return d;
   }
 
+  /**
+   * Lit une durée écrite comme « 18h15 », « 18:15 », « 18,25 » ou « 79 » → minutes (NaN si illisible).
+   */
+  function parseDuration(v) {
+    if (typeof v === 'number') return isFinite(v) && v >= 0 ? Math.round(v * 60) : NaN;
+    const s = String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, '');
+    if (!s) return NaN;
+    let m = s.match(/^(\d{1,3})(?:h|:)(\d{1,2})?$/);
+    if (m) {
+      const mm = m[2] ? Number(m[2]) : 0;
+      return mm < 60 ? Number(m[1]) * 60 + mm : NaN;
+    }
+    m = s.match(/^(\d{1,3})(?:[.,](\d+))?$/);
+    if (m) return Math.round(Number(m[1] + '.' + (m[2] || '0')) * 60);
+    return NaN;
+  }
+
+  /** Lit un montant « 1 234,56 » ou « 1234.56 » → nombre (0 si vide ou illisible). */
+  function parseMoney(v) {
+    const n = Number(String(v == null ? '' : v).replace(/[\s  €]/g, '').replace(',', '.'));
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+
+  /* ---------- Nuit, dimanche, jours fériés ---------- */
+
+  const NIGHT_START = 21 * 60; // 21:00
+  const NIGHT_END = 6 * 60; // 06:00
+
+  function bounds(s) {
+    const a = toMin(s.start);
+    return [a, a + durationMin(s.start, s.end)];
+  }
+  function overlap(a1, a2, b1, b2) {
+    return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+  }
+  /** Minutes du créneau entre 21h et 6h. */
+  function nightMin(s) {
+    const [a, e] = bounds(s);
+    let t = 0;
+    for (let k = -1; k <= 1; k++) t += overlap(a, e, NIGHT_START + k * 1440, NIGHT_END + (k + 1) * 1440);
+    return t;
+  }
+  /** Découpe un créneau par jour du calendrier (un créneau de nuit déborde sur le lendemain). */
+  function daySegments(s) {
+    const [a, e] = bounds(s);
+    if (e <= 1440) return [{ date: s.date, min: e - a }];
+    return [{ date: s.date, min: 1440 - a }, { date: addDays(s.date, 1), min: e - 1440 }];
+  }
+
+  /** Dimanche de Pâques (calcul grégorien). */
+  function easterSunday(y) {
+    const a = y % 19;
+    const b = Math.floor(y / 100);
+    const c = y % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return y + '-' + pad(month) + '-' + pad(day);
+  }
+  const holidayCache = {};
+  /** Jours fériés en France métropolitaine. */
+  function holidaysOf(y) {
+    if (!holidayCache[y]) {
+      const e = easterSunday(y);
+      holidayCache[y] = new Set([
+        y + '-01-01', addDays(e, 1), y + '-05-01', y + '-05-08', addDays(e, 39), addDays(e, 50),
+        y + '-07-14', y + '-08-15', y + '-11-01', y + '-11-11', y + '-12-25',
+      ]);
+    }
+    return holidayCache[y];
+  }
+  function isHoliday(date) {
+    return holidaysOf(Number(String(date).slice(0, 4))).has(date);
+  }
+  /** Heures du dimanche (un dimanche férié compte seulement comme jour férié). */
+  function sundayMin(s) {
+    return daySegments(s).filter((g) => weekday(g.date) === 6 && !isHoliday(g.date)).reduce((t, g) => t + g.min, 0);
+  }
+  function holidayMin(s) {
+    return daySegments(s).filter((g) => isHoliday(g.date)).reduce((t, g) => t + g.min, 0);
+  }
+
   function sortShifts(list) {
     return list.slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   }
@@ -104,13 +194,49 @@
     return { over, t1, t2: over - t1 };
   }
 
-  function pay(totalMin, ot, settings) {
-    const rate = Number(String(settings.rate).replace(',', '.'));
+  /** Heures prévues au contrat sur un mois (minutes). */
+  function monthlyContractMin(settings) {
+    const h = settings.contractPeriod === 'month' ? settings.contractHours : settings.monthlyHours;
+    return Math.round((Number(h) || 0) * 60);
+  }
+
+  /** Taux horaire : calculé depuis le salaire de base s'il est rempli, sinon le taux saisi. */
+  function hourlyRate(settings) {
+    const base = parseMoney(settings.baseSalary);
+    const mMin = monthlyContractMin(settings);
+    if (base > 0 && mMin > 0) return base / (mMin / 60);
+    return parseMoney(settings.rate);
+  }
+
+  /**
+   * Salaire brut estimé du mois, ligne par ligne.
+   * - Avec un salaire de base (salaire mensualisé) : base + heures supp payées en entier avec leur majoration.
+   * - Sans salaire de base : toutes les heures × taux + majorations des heures supp.
+   * - Dans les deux cas : majorations de nuit, du dimanche et des jours fériés.
+   */
+  function pay(m, settings) {
+    const rate = hourlyRate(settings);
     if (!(rate > 0)) return null;
-    const base = round2((totalMin / 60) * rate);
-    const m1 = round2((ot.t1 / 60) * rate * (Number(settings.maj1) || 0) / 100);
-    const m2 = round2((ot.t2 / 60) * rate * (Number(settings.maj2) || 0) / 100);
-    return { rate, base, maj1: m1, maj2: m2, total: round2(base + m1 + m2) };
+    const base = parseMoney(settings.baseSalary);
+    const mMin = monthlyContractMin(settings);
+    const monthly = base > 0 && mMin > 0;
+    const pct = (k) => (Number(settings[k]) || 0) / 100;
+    const amount = (min, factor) => round2((min / 60) * rate * factor);
+    const lines = [];
+    if (monthly) {
+      lines.push({ key: 'base', min: mMin, amount: round2(base) });
+      if (m.ot.t1) lines.push({ key: 'hc', min: m.ot.t1, pct: Number(settings.maj1) || 0, amount: amount(m.ot.t1, 1 + pct('maj1')) });
+      if (m.ot.t2) lines.push({ key: 'hc', min: m.ot.t2, pct: Number(settings.maj2) || 0, amount: amount(m.ot.t2, 1 + pct('maj2')) });
+    } else {
+      lines.push({ key: 'hours', min: m.total, amount: amount(m.total, 1) });
+      if (m.ot.t1 && pct('maj1')) lines.push({ key: 'hcMaj', min: m.ot.t1, pct: Number(settings.maj1), amount: amount(m.ot.t1, pct('maj1')) });
+      if (m.ot.t2 && pct('maj2')) lines.push({ key: 'hcMaj', min: m.ot.t2, pct: Number(settings.maj2), amount: amount(m.ot.t2, pct('maj2')) });
+    }
+    [['night', 'nightMaj'], ['sunday', 'sundayMaj'], ['holiday', 'holidayMaj']].forEach(([k, s]) => {
+      if (m[k] && pct(s)) lines.push({ key: k, min: m[k], pct: Number(settings[s]), amount: amount(m[k], pct(s)) });
+    });
+    const total = round2(lines.reduce((t, l) => t + l.amount, 0));
+    return { rate, monthly, lines, total };
   }
 
   /** Résumé d'une semaine (lundi → dimanche). */
@@ -124,11 +250,16 @@
       days.push({ date, shifts: ds, total: sumMin(ds) });
     }
     const total = sumMin(list);
-    const ot = settings.contractPeriod === 'week'
-      ? splitOvertime(total, contractMin(settings))
-      : { over: 0, t1: 0, t2: 0 };
+    const weekly = settings.contractPeriod === 'week';
+    const ot = weekly ? splitOvertime(total, contractMin(settings)) : { over: 0, t1: 0, t2: 0 };
+    // Limite légale des heures complémentaires : 1/3 des heures du contrat
+    const limit = weekly ? Math.round(contractMin(settings) / 3) : 0;
     // Une semaine à cheval sur deux mois est comptée dans le mois où elle se termine (le dimanche).
-    return { start: wStart, end: wEnd, days, shifts: list, total, ot, countedIn: monthKey(wEnd) };
+    return {
+      start: wStart, end: wEnd, days, shifts: list, total, ot,
+      limit, overLimit: weekly && limit > 0 && ot.over > limit,
+      countedIn: monthKey(wEnd),
+    };
   }
 
   /** Résumé d'un mois (mk = "AAAA-MM"). */
@@ -163,7 +294,19 @@
       days[s.date] = (days[s.date] || 0) + durationMin(s.start, s.end);
     });
 
-    return { month: mk, first, last, shifts: list, total, ot, weeks, days, pay: pay(total, ot, settings) };
+    const sum = (fn) => list.reduce((t, s) => t + fn(s), 0);
+    const night = sum(nightMin);
+    const m = {
+      month: mk, first, last, shifts: list, total, ot, weeks, days,
+      night,
+      sunday: sum(sundayMin),
+      holiday: sum(holidayMin),
+      // Repos compensateur des travailleurs de nuit (propreté) : 2 % des heures de nuit
+      nightRest: Math.round(night * 0.02),
+      contractMonth: monthlyContractMin(settings),
+    };
+    m.pay = pay(m, settings);
+    return m;
   }
 
   /* ---------- Données ---------- */
@@ -179,17 +322,26 @@
     { id: 'f4', place: 'Saint-Maur', start: '19:00', end: '22:30' },
   ];
 
+  // Réglages par défaut : contrat de 18h15 par semaine (79 h par mois),
+  // majorations de la convention collective de la propreté.
   const DEFAULT_SETTINGS = {
+    settingsVersion: 2,
     lang: 'ar',
     name: '',
-    contractHours: 24,
+    contractHours: 18.25,
     contractPeriod: 'week',
+    monthlyHours: 79,
+    baseSalary: '',
     rate: '',
     maj1: 10,
     maj2: 25,
+    nightMaj: 20,
+    sundayMaj: 25,
+    holidayMaj: 50,
     lastBackup: '',
     favorites: DEFAULT_FAVORITES,
   };
+  const NUMBER_SETTINGS = ['contractHours', 'monthlyHours', 'maj1', 'maj2', 'nightMaj', 'sundayMaj', 'holidayMaj'];
 
   // Heures d'octobre et du début de novembre 2026, recopiées des feuilles papier.
   const SEED = [
@@ -244,7 +396,23 @@
   /** Vérifie et complète des données (chargées du téléphone ou d'une sauvegarde). Renvoie null si inutilisable. */
   function normalizeState(raw) {
     if (!raw || typeof raw !== 'object' || !Array.isArray(raw.shifts)) return null;
-    const settings = Object.assign(clone(DEFAULT_SETTINGS), raw.settings && typeof raw.settings === 'object' ? raw.settings : {});
+    const rawSettings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {};
+    const settings = Object.assign(clone(DEFAULT_SETTINGS), rawSettings);
+    // Version 1 → 2 : les 24 h provisoires sont remplacées par les heures du contrat (18h15)
+    if (!(Number(rawSettings.settingsVersion) >= 2)) {
+      if (rawSettings.contractHours == null || Number(rawSettings.contractHours) === 24) {
+        settings.contractHours = DEFAULT_SETTINGS.contractHours;
+        settings.contractPeriod = 'week';
+      }
+      settings.settingsVersion = 2;
+    }
+    NUMBER_SETTINGS.forEach((k) => {
+      const n = Number(String(settings[k]).replace(',', '.'));
+      settings[k] = isFinite(n) && n >= 0 ? n : DEFAULT_SETTINGS[k];
+    });
+    settings.rate = String(settings.rate == null ? '' : settings.rate);
+    settings.baseSalary = String(settings.baseSalary == null ? '' : settings.baseSalary);
+    settings.name = String(settings.name == null ? '' : settings.name);
     if (!Array.isArray(settings.favorites)) settings.favorites = clone(DEFAULT_FAVORITES);
     settings.favorites = settings.favorites
       .filter((f) => f && isTime(f.start) && isTime(f.end) && f.start !== f.end)
@@ -277,7 +445,8 @@
     parseDate, fmtDate, isDate, addDays, weekday, weekStart, todayStr,
     monthKey, monthFirst, monthLast, addMonths,
     isTime, toMin, endsNextDay, durationMin, sortShifts, inRange, sumMin,
-    contractMin, splitOvertime, pay, weekSummary, monthSummary,
+    parseDuration, parseMoney, nightMin, sundayMin, holidayMin, isHoliday, easterSunday,
+    contractMin, monthlyContractMin, hourlyRate, splitOvertime, pay, weekSummary, monthSummary,
     uid, DEFAULT_SETTINGS, DEFAULT_FAVORITES, SEED, initialState, normalizeState, knownPlaces,
   };
 });

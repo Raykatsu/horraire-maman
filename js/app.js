@@ -4,7 +4,7 @@
 
   const C = window.HMCore;
   const STORE_KEY = 'heures-maman:v1';
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
 
   /* ---------- Données ---------- */
 
@@ -68,6 +68,11 @@
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
   const bdi = (s) => '<bdi>' + esc(s) + '</bdi>';
+  /** 18.25 → « 18h15 », 79 → « 79h » (pour les champs des réglages) */
+  const hoursInput = (h) => {
+    const min = Math.round((Number(h) || 0) * 60);
+    return Math.floor(min / 60) + 'h' + (min % 60 ? String(min % 60).padStart(2, '0') : '');
+  };
 
   const ICONS = {
     week: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M7 13h10M7 17h6"/></svg>',
@@ -163,7 +168,9 @@
       html += '<div class="sum-sub">' + esc(I.t('ofContract', { c: I.dur(cMin) })) + '</div>'
         + '<div class="bar' + (w.ot.over ? ' over' : '') + '"><div class="fill" style="width:' + pct + '%"></div></div>';
       html += w.ot.over
-        ? '<div class="ot"><strong>' + esc(I.t('otLabel', { d: I.dur(w.ot.over) })) + '</strong><small>' + otText(w.ot) + '</small></div>'
+        ? '<div class="ot"><strong>' + esc(I.t('otLabel', { d: I.dur(w.ot.over) })) + '</strong><small>' + otText(w.ot) + '</small>'
+          + (w.overLimit ? '<small class="warn">' + esc(I.t('overLimit', { l: I.dur(w.limit) })) + '</small>' : '')
+          + '</div>'
         : '<div class="ot none">' + esc(I.t('noOvertime')) + '</div>';
     }
     html += '</section>';
@@ -173,7 +180,9 @@
     w.days.forEach((d) => {
       const isToday = d.date === today();
       html += '<article class="day' + (isToday ? ' today' : '') + (d.shifts.length ? '' : ' empty') + '" id="day-' + d.date + '">'
-        + '<div class="day-head"><div><div class="day-name">' + esc(I.dayName(d.date)) + (isToday ? ' <span class="pill">' + esc(I.t('today')) + '</span>' : '') + '</div>'
+        + '<div class="day-head"><div><div class="day-name">' + esc(I.dayName(d.date))
+        + (isToday ? ' <span class="pill">' + esc(I.t('today')) + '</span>' : '')
+        + (C.isHoliday(d.date) ? ' <span class="pill hol">' + esc(I.t('holiday')) + '</span>' : '') + '</div>'
         + '<div class="day-date">' + esc(I.dateShort(d.date)) + '</div></div>'
         + '<div class="day-total">' + (d.total ? esc(I.dur(d.total)) : '—') + '</div></div>';
       if (d.shifts.length) {
@@ -211,26 +220,32 @@
       + '</div>';
 
     // Résumé
+    const cm = m.contractMonth;
     html += '<section class="card summary">'
       + '<div class="sum-label">' + esc(I.t('monthTotal')) + '</div>'
       + '<div class="sum-big">' + esc(I.dur(m.total)) + '</div>';
-    if (st.contractPeriod === 'month' && cMin > 0) {
-      const pct = Math.min(100, Math.round((m.total / cMin) * 100));
-      html += '<div class="sum-sub">' + esc(I.t('ofContract', { c: I.dur(cMin) })) + '</div>'
-        + '<div class="bar' + (m.ot.over ? ' over' : '') + '"><div class="fill" style="width:' + pct + '%"></div></div>';
+    if (cm > 0) {
+      const diff = m.total - cm;
+      const pct = Math.min(100, Math.round((m.total / cm) * 100));
+      html += '<div class="sum-sub">' + esc(I.t(diff > 0 ? 'vsMore' : diff < 0 ? 'vsLess' : 'vsEqual', { d: I.dur(Math.abs(diff)), c: I.dur(cm) })) + '</div>'
+        + '<div class="bar' + (diff > 0 ? ' over' : '') + '"><div class="fill" style="width:' + pct + '%"></div></div>';
     }
     html += m.ot.over
       ? '<div class="ot"><strong>' + esc(I.t('otLabel', { d: I.dur(m.ot.over) })) + '</strong><small>' + otText(m.ot) + '</small></div>'
       : '<div class="ot none">' + esc(I.t('noOvertime')) + '</div>';
+
+    // Heures de nuit, du dimanche et des jours fériés
+    const extra = (key, min) => '<div class="extra"><span>' + esc(I.t(key)) + '</span><strong>' + esc(I.dur(min)) + '</strong></div>';
+    html += '<div class="extras">' + extra('nightHours', m.night) + extra('sundayHours', m.sunday) + extra('holidayHours', m.holiday) + '</div>';
+    if (m.nightRest) html += '<small class="note-line">' + esc(I.t('nightRest', { d: I.dur(m.nightRest) })) + '</small>';
+
     if (m.pay) {
       html += '<div class="salary"><div class="sum-label">' + esc(I.t('salary')) + '</div>'
         + '<div class="salary-big">' + esc(I.money(m.pay.total)) + '</div>'
-        + '<small>' + esc(I.t('salaryDetail', {
-          h: I.num(C.round2(m.total / 60)),
-          r: I.money(m.pay.rate),
-          b: I.money(m.pay.base),
-          m: I.money(C.round2(m.pay.maj1 + m.pay.maj2)),
-        })) + '</small></div>';
+        + '<ul class="pay-lines">'
+        + m.pay.lines.map((l) => '<li><span>' + esc(I.t('payLine_' + l.key, { p: l.pct, h: I.dur(l.min) })) + '</span><strong>' + esc(I.money(l.amount)) + '</strong></li>').join('')
+        + '</ul>'
+        + '<small>' + esc(I.t('rateLine', { r: I.money(m.pay.rate) })) + ' · ' + esc(I.t('payNote')) + '</small></div>';
     } else {
       html += '<button class="hint" data-action="go-settings">' + esc(I.t('needRate')) + '</button>';
     }
@@ -243,7 +258,7 @@
     for (let i = 0; i < offset; i++) html += '<div class="cal-c blank"></div>';
     for (let d = m.first; d <= m.last; d = C.addDays(d, 1)) {
       const min = m.days[d] || 0;
-      html += '<button class="cal-c' + (min ? ' has' : '') + (d === today() ? ' today' : '') + '" data-action="open-day" data-date="' + d + '">'
+      html += '<button class="cal-c' + (min ? ' has' : '') + (d === today() ? ' today' : '') + (C.isHoliday(d) ? ' hol' : '') + '" data-action="open-day" data-date="' + d + '">'
         + '<span class="cal-d">' + Number(d.slice(8)) + '</span>'
         + '<span class="cal-v">' + (min ? esc(I.durCompact(min)) : '') + '</span></button>';
     }
@@ -290,18 +305,34 @@
       + '<label class="field"><span>' + esc(I.t('yourName')) + '</span><input type="text" data-setting="name" value="' + esc(st.name) + '" autocomplete="name"></label>'
       + '</section>';
 
+    const rate = C.hourlyRate(st);
+    const autoRate = C.parseMoney(st.baseSalary) > 0 && C.monthlyContractMin(st) > 0;
     html += '<section class="card"><h2>' + esc(I.t('contract')) + '</h2>'
       + '<label class="field"><span>' + esc(I.t('contractHours')) + '</span><div class="inline">'
-      + '<input type="number" inputmode="decimal" min="0" step="0.5" data-setting="contractHours" value="' + esc(st.contractHours) + '">'
+      + '<input type="text" autocomplete="off" data-setting="contractHours" data-kind="duration" placeholder="' + esc(I.t('contractHoursPh')) + '" value="' + esc(hoursInput(st.contractHours)) + '">'
       + '<select data-setting="contractPeriod"><option value="week"' + (st.contractPeriod === 'week' ? ' selected' : '') + '>' + esc(I.t('perWeek')) + '</option>'
-      + '<option value="month"' + (st.contractPeriod === 'month' ? ' selected' : '') + '>' + esc(I.t('perMonth')) + '</option></select></div></label>'
-      + '<label class="field"><span>' + esc(I.t('rate')) + '</span><input type="text" inputmode="decimal" data-setting="rate" placeholder="' + esc(I.t('ratePh')) + '" value="' + esc(st.rate) + '"></label>'
-      + '<div class="two">'
-      + '<label class="field"><span>' + esc(I.t('maj1')) + '</span><input type="number" inputmode="decimal" min="0" data-setting="maj1" value="' + esc(st.maj1) + '"></label>'
-      + '<label class="field"><span>' + esc(I.t('maj2')) + '</span><input type="number" inputmode="decimal" min="0" data-setting="maj2" value="' + esc(st.maj2) + '"></label>'
-      + '</div>'
-      + '<p class="help">' + esc(I.t('otRule', { cap: I.dur(Math.round(cMin / 10)) })) + '</p>'
+      + '<option value="month"' + (st.contractPeriod === 'month' ? ' selected' : '') + '>' + esc(I.t('perMonth')) + '</option></select></div></label>';
+    if (st.contractPeriod === 'week') {
+      html += '<label class="field"><span>' + esc(I.t('monthlyHours')) + '</span>'
+        + '<input type="text" autocomplete="off" data-setting="monthlyHours" data-kind="duration" value="' + esc(hoursInput(st.monthlyHours)) + '"></label>'
+        + '<p class="help">' + esc(I.t('monthlyHoursHelp')) + '</p>';
+    }
+    html += '<label class="field"><span>' + esc(I.t('baseSalary')) + '</span>'
+      + '<input type="text" inputmode="decimal" autocomplete="off" data-setting="baseSalary" data-kind="money" placeholder="' + esc(I.t('basePh')) + '" value="' + esc(st.baseSalary) + '"></label>'
+      + '<label class="field"><span>' + esc(I.t('rate')) + '</span>'
+      + '<input type="text" inputmode="decimal" autocomplete="off" data-setting="rate" data-kind="money" placeholder="' + esc(I.t('ratePh')) + '" value="'
+      + esc(autoRate ? I.num(C.round2(rate)) : st.rate) + '"' + (autoRate ? ' disabled' : '') + '></label>'
+      + '<p class="help">' + esc(autoRate ? I.t('rateAuto', { r: I.money(rate) }) : I.t('rateManual')) + '</p>'
+      + '<p class="help">' + esc(I.t('otRule', { cap: I.dur(Math.round(cMin / 10)), lim: I.dur(Math.round(cMin / 3)) })) + '</p>'
       + '</section>';
+
+    const majField = (key, label) => '<label class="field"><span>' + esc(I.t(label)) + '</span>'
+      + '<input type="number" inputmode="decimal" min="0" step="1" data-setting="' + key + '" value="' + esc(st[key]) + '"></label>';
+    html += '<section class="card"><h2>' + esc(I.t('majTitle')) + '</h2><div class="two">'
+      + majField('maj1', 'majHc1') + majField('maj2', 'majHc2')
+      + majField('nightMaj', 'majNight') + majField('sundayMaj', 'majSunday')
+      + majField('holidayMaj', 'majHoliday')
+      + '</div><p class="help">' + esc(I.t('majHelp')) + '</p></section>';
 
     html += '<section class="card"><h2>' + esc(I.t('favorites')) + '</h2><p class="help">' + esc(I.t('favoritesHelp')) + '</p><ul class="favs">';
     st.favorites.forEach((f) => {
@@ -709,16 +740,31 @@
     }
     const key = t.dataset && t.dataset.setting;
     if (!key) return;
+    const kind = t.dataset.kind;
     let val = t.value;
-    if (key === 'contractHours' || key === 'maj1' || key === 'maj2') {
+    if (kind === 'duration') {
+      const min = C.parseDuration(val);
+      if (!(min > 0)) {
+        toast(I.t('badHours'));
+        render();
+        return;
+      }
+      val = min / 60;
+    } else if (kind === 'money') {
+      val = String(val).trim();
+      if (val && !C.parseMoney(val)) {
+        toast(I.t('badAmount'));
+        render();
+        return;
+      }
+    } else if (['maj1', 'maj2', 'nightMaj', 'sundayMaj', 'holidayMaj'].indexOf(key) >= 0) {
       const n = Number(String(val).replace(',', '.'));
       val = isFinite(n) && n >= 0 ? n : 0;
     }
-    if (key === 'rate') val = String(val).trim().replace('.', ',');
     state.settings[key] = val;
     save();
-    if (key === 'contractPeriod' || key === 'contractHours') render();
-    else toast(I.t('saved'));
+    if (['contractPeriod', 'contractHours', 'monthlyHours', 'baseSalary', 'rate'].indexOf(key) >= 0) render();
+    toast(I.t('saved'));
   });
 
   document.addEventListener('keydown', (e) => {
