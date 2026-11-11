@@ -4,7 +4,7 @@
 
   const C = window.HMCore;
   const STORE_KEY = 'heures-maman:v1';
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
 
   /* ---------- Données ---------- */
 
@@ -78,6 +78,7 @@
     week: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M7 13h10M7 17h6"/></svg>',
     month: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01"/></svg>',
     settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+    pay: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 10v5M18 10v5"/></svg>',
     prev: '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
     next: '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
@@ -129,12 +130,13 @@
       const tab = b.dataset.tab;
       b.classList.toggle('active', tab === ui.tab);
       b.setAttribute('aria-current', tab === ui.tab ? 'page' : 'false');
-      b.innerHTML = ICONS[tab] + '<span>' + esc(I.t(tab === 'week' ? 'tabWeek' : tab === 'month' ? 'tabMonth' : 'tabSettings')) + '</span>';
+      b.innerHTML = ICONS[tab] + '<span>' + esc(I.t({ week: 'tabWeek', month: 'tabMonth', pay: 'tabPay', settings: 'tabSettings' }[tab])) + '</span>';
     });
 
     const view = $('#view');
     if (ui.tab === 'week') view.innerHTML = renderWeek();
     else if (ui.tab === 'month') view.innerHTML = renderMonth();
+    else if (ui.tab === 'pay') view.innerHTML = renderPay();
     else view.innerHTML = renderSettings();
   }
 
@@ -169,7 +171,6 @@
         + '<div class="bar' + (w.ot.over ? ' over' : '') + '"><div class="fill" style="width:' + pct + '%"></div></div>';
       html += w.ot.over
         ? '<div class="ot"><strong>' + esc(I.t('otLabel', { d: I.dur(w.ot.over) })) + '</strong><small>' + otText(w.ot) + '</small>'
-          + (C.overtimeAmount(w.ot, st) ? '<small><strong>' + esc(I.t('otWeekPay', { a: I.money(C.overtimeAmount(w.ot, st)) })) + '</strong></small>' : '')
           + (w.overLimit ? '<small class="warn">' + esc(I.t('overLimit', { l: I.dur(w.limit) })) + '</small>' : '')
           + '</div>'
         : '<div class="ot none">' + esc(I.t('noOvertime')) + '</div>';
@@ -201,6 +202,39 @@
         + '</article>';
     });
     html += '</section>';
+    return html;
+  }
+
+  function monthNav() {
+    return '<div class="nav-row">'
+      + '<button class="icon-btn" data-action="month-prev" aria-label="' + esc(I.t('prevMonth')) + '">' + ICONS.prev + '</button>'
+      + '<div class="nav-title"><div class="nav-main cap">' + esc(I.monthTitle(ui.month)) + '</div>'
+      + (ui.month === C.monthKey(today()) ? '' : '<button class="link-btn" data-action="month-today">' + esc(I.t('today')) + '</button>')
+      + '</div>'
+      + '<button class="icon-btn" data-action="month-next" aria-label="' + esc(I.t('nextMonth')) + '">' + ICONS.next + '</button>'
+      + '</div>';
+  }
+
+  /* ---------- Salaire ---------- */
+
+  function renderPay() {
+    const m = C.monthSummary(state.shifts, ui.month, state.settings);
+    let html = monthNav();
+    if (!m.pay) {
+      return html + '<section class="card"><button class="hint" data-action="go-settings">' + esc(I.t('needRate')) + '</button></section>';
+    }
+    html += '<section class="card summary"><div class="sum-label">' + esc(I.t('shouldBePaid')) + '</div>'
+      + '<div class="sum-big">' + esc(I.money(m.pay.total)) + '</div>'
+      + '<div class="sum-sub">' + esc(I.lang === 'ar' ? 'خام' : 'brut') + '</div>'
+      + (m.pay.net ? '<div class="net big-net">' + esc(I.t('netEst', { n: I.money(m.pay.net) })) + '</div>' : '')
+      + '</section>';
+    html += '<section class="card"><div class="pay-ot">'
+      + '<span>' + esc(I.t('overtime')) + '</span><strong>' + esc(I.dur(m.ot.over)) + '</strong>'
+      + '<strong class="pay-ot-amount">' + esc(I.money(m.pay.hcAmount)) + '</strong></div></section>';
+    html += '<section class="card"><h2>' + esc(I.t('payDetail')) + '</h2><ul class="pay-lines">'
+      + m.pay.lines.map((l) => '<li><span>' + esc(I.t('payLine_' + l.key, { p: l.pct, h: I.dur(l.min) })) + '</span><strong>' + esc(I.money(l.amount)) + '</strong></li>').join('')
+      + '<li class="pay-total"><span>' + esc(I.t('salary')) + '</span><strong>' + esc(I.money(m.pay.total)) + '</strong></li>'
+      + '</ul><p class="help">' + esc(I.t('rateLine', { r: I.money(m.pay.rate) })) + ' · ' + esc(I.t('payNote')) + '</p></section>';
     return html;
   }
 
@@ -240,18 +274,6 @@
     html += '<div class="extras">' + extra('nightHours', m.night) + extra('sundayHours', m.sunday) + extra('holidayHours', m.holiday) + '</div>';
     if (m.nightRest) html += '<small class="note-line">' + esc(I.t('nightRest', { d: I.dur(m.nightRest) })) + '</small>';
 
-    if (m.pay) {
-      html += '<div class="salary"><div class="sum-label">' + esc(I.t('shouldBePaid')) + '</div>'
-        + '<div class="salary-big">' + esc(I.money(m.pay.total)) + ' <small class="brut">' + (I.lang === 'ar' ? 'خام' : 'brut') + '</small></div>'
-        + (m.pay.net ? '<div class="net">' + esc(I.t('netEst', { n: I.money(m.pay.net) })) + '</div>' : '')
-        + (m.ot.over ? '<div class="ot-pay">' + esc(I.t('otPay', { d: I.dur(m.ot.over), a: I.money(m.pay.hcAmount) })) + '</div>' : '')
-        + '<ul class="pay-lines">'
-        + m.pay.lines.map((l) => '<li><span>' + esc(I.t('payLine_' + l.key, { p: l.pct, h: I.dur(l.min) })) + '</span><strong>' + esc(I.money(l.amount)) + '</strong></li>').join('')
-        + '</ul>'
-        + '<small>' + esc(I.t('rateLine', { r: I.money(m.pay.rate) })) + ' · ' + esc(I.t('payNote')) + '</small></div>';
-    } else {
-      html += '<button class="hint" data-action="go-settings">' + esc(I.t('needRate')) + '</button>';
-    }
     html += '</section>';
 
     // Calendrier

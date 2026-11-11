@@ -4,7 +4,7 @@
  * et si ça ne marche pas, on utilise la copie gardée sur le téléphone.
  * Les heures, elles, ne passent jamais par ici : elles restent dans le téléphone.
  */
-const CACHE = 'heures-maman-v3';
+const CACHE = 'heures-maman-v4';
 const FILES = [
   './',
   'index.html',
