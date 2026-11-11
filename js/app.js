@@ -4,7 +4,7 @@
 
   const C = window.HMCore;
   const STORE_KEY = 'heures-maman:v1';
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
 
   /* ---------- Données ---------- */
 
@@ -169,6 +169,7 @@
         + '<div class="bar' + (w.ot.over ? ' over' : '') + '"><div class="fill" style="width:' + pct + '%"></div></div>';
       html += w.ot.over
         ? '<div class="ot"><strong>' + esc(I.t('otLabel', { d: I.dur(w.ot.over) })) + '</strong><small>' + otText(w.ot) + '</small>'
+          + (C.overtimeAmount(w.ot, st) ? '<small><strong>' + esc(I.t('otWeekPay', { a: I.money(C.overtimeAmount(w.ot, st)) })) + '</strong></small>' : '')
           + (w.overLimit ? '<small class="warn">' + esc(I.t('overLimit', { l: I.dur(w.limit) })) + '</small>' : '')
           + '</div>'
         : '<div class="ot none">' + esc(I.t('noOvertime')) + '</div>';
@@ -240,8 +241,10 @@
     if (m.nightRest) html += '<small class="note-line">' + esc(I.t('nightRest', { d: I.dur(m.nightRest) })) + '</small>';
 
     if (m.pay) {
-      html += '<div class="salary"><div class="sum-label">' + esc(I.t('salary')) + '</div>'
-        + '<div class="salary-big">' + esc(I.money(m.pay.total)) + '</div>'
+      html += '<div class="salary"><div class="sum-label">' + esc(I.t('shouldBePaid')) + '</div>'
+        + '<div class="salary-big">' + esc(I.money(m.pay.total)) + ' <small class="brut">' + (I.lang === 'ar' ? 'خام' : 'brut') + '</small></div>'
+        + (m.pay.net ? '<div class="net">' + esc(I.t('netEst', { n: I.money(m.pay.net) })) + '</div>' : '')
+        + (m.ot.over ? '<div class="ot-pay">' + esc(I.t('otPay', { d: I.dur(m.ot.over), a: I.money(m.pay.hcAmount) })) + '</div>' : '')
         + '<ul class="pay-lines">'
         + m.pay.lines.map((l) => '<li><span>' + esc(I.t('payLine_' + l.key, { p: l.pct, h: I.dur(l.min) })) + '</span><strong>' + esc(I.money(l.amount)) + '</strong></li>').join('')
         + '</ul>'
@@ -331,8 +334,8 @@
     html += '<section class="card"><h2>' + esc(I.t('majTitle')) + '</h2><div class="two">'
       + majField('maj1', 'majHc1') + majField('maj2', 'majHc2')
       + majField('nightMaj', 'majNight') + majField('sundayMaj', 'majSunday')
-      + majField('holidayMaj', 'majHoliday')
-      + '</div><p class="help">' + esc(I.t('majHelp')) + '</p></section>';
+      + majField('holidayMaj', 'majHoliday') + majField('netPct', 'netPct')
+      + '</div><p class="help">' + esc(I.t('majHelp')) + '</p><p class="help">' + esc(I.t('netHelp')) + '</p></section>';
 
     html += '<section class="card"><h2>' + esc(I.t('favorites')) + '</h2><p class="help">' + esc(I.t('favoritesHelp')) + '</p><ul class="favs">';
     st.favorites.forEach((f) => {
@@ -757,7 +760,7 @@
         render();
         return;
       }
-    } else if (['maj1', 'maj2', 'nightMaj', 'sundayMaj', 'holidayMaj'].indexOf(key) >= 0) {
+    } else if (['maj1', 'maj2', 'nightMaj', 'sundayMaj', 'holidayMaj', 'netPct'].indexOf(key) >= 0) {
       const n = Number(String(val).replace(',', '.'));
       val = isFinite(n) && n >= 0 ? n : 0;
     }

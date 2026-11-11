@@ -236,7 +236,18 @@
       if (m[k] && pct(s)) lines.push({ key: k, min: m[k], pct: Number(settings[s]), amount: amount(m[k], pct(s)) });
     });
     const total = round2(lines.reduce((t, l) => t + l.amount, 0));
-    return { rate, monthly, lines, total };
+    // Montant des heures supp (heures + majoration) et net estimé
+    const hcAmount = round2(lines.filter((l) => l.key === 'hc' || l.key === 'hcMaj').reduce((t, l) => t + l.amount, 0));
+    const netPct = Number(settings.netPct) || 0;
+    return { rate, monthly, lines, total, hcAmount, net: netPct > 0 ? round2(total * netPct / 100) : null };
+  }
+
+  /** Ce que rapportent des heures supp (heures payées + majoration). */
+  function overtimeAmount(ot, settings) {
+    const rate = hourlyRate(settings);
+    if (!(rate > 0) || !ot.over) return 0;
+    const pct = (k) => (Number(settings[k]) || 0) / 100;
+    return round2((ot.t1 / 60) * rate * (1 + pct('maj1')) + (ot.t2 / 60) * rate * (1 + pct('maj2')));
   }
 
   /** Résumé d'une semaine (lundi → dimanche). */
@@ -325,13 +336,14 @@
   // Réglages par défaut : contrat de 18h15 par semaine (79 h par mois),
   // majorations de la convention collective de la propreté.
   const DEFAULT_SETTINGS = {
-    settingsVersion: 2,
+    settingsVersion: 3,
     lang: 'ar',
     name: '',
     contractHours: 18.25,
     contractPeriod: 'week',
     monthlyHours: 79,
-    baseSalary: '',
+    baseSalary: '993,99',
+    netPct: 78,
     rate: '',
     maj1: 10,
     maj2: 25,
@@ -341,7 +353,7 @@
     lastBackup: '',
     favorites: DEFAULT_FAVORITES,
   };
-  const NUMBER_SETTINGS = ['contractHours', 'monthlyHours', 'maj1', 'maj2', 'nightMaj', 'sundayMaj', 'holidayMaj'];
+  const NUMBER_SETTINGS = ['netPct', 'contractHours', 'monthlyHours', 'maj1', 'maj2', 'nightMaj', 'sundayMaj', 'holidayMaj'];
 
   // Heures d'octobre et du début de novembre 2026, recopiées des feuilles papier.
   const SEED = [
@@ -406,6 +418,11 @@
       }
       settings.settingsVersion = 2;
     }
+    // Version 2 → 3 : salaire de base du contrat (993,99 € pour 79 h) rempli d'office
+    if (!(Number(rawSettings.settingsVersion) >= 3)) {
+      if (!rawSettings.baseSalary) settings.baseSalary = DEFAULT_SETTINGS.baseSalary;
+      settings.settingsVersion = 3;
+    }
     NUMBER_SETTINGS.forEach((k) => {
       const n = Number(String(settings[k]).replace(',', '.'));
       settings[k] = isFinite(n) && n >= 0 ? n : DEFAULT_SETTINGS[k];
@@ -446,7 +463,7 @@
     monthKey, monthFirst, monthLast, addMonths,
     isTime, toMin, endsNextDay, durationMin, sortShifts, inRange, sumMin,
     parseDuration, parseMoney, nightMin, sundayMin, holidayMin, isHoliday, easterSunday,
-    contractMin, monthlyContractMin, hourlyRate, splitOvertime, pay, weekSummary, monthSummary,
+    contractMin, monthlyContractMin, hourlyRate, overtimeAmount, splitOvertime, pay, weekSummary, monthSummary,
     uid, DEFAULT_SETTINGS, DEFAULT_FAVORITES, SEED, initialState, normalizeState, knownPlaces,
   };
 });
