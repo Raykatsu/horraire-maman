@@ -209,37 +209,29 @@
   }
 
   /**
-   * Salaire brut estimé du mois, ligne par ligne.
-   * - Avec un salaire de base (salaire mensualisé) : base + heures supp payées en entier avec leur majoration.
-   * - Sans salaire de base : toutes les heures × taux + majorations des heures supp.
-   * - Dans les deux cas : majorations de nuit, du dimanche et des jours fériés.
+   * Salaire brut estimé du mois, calculé UNIQUEMENT à partir des heures saisies :
+   * heures × taux horaire du contrat + majorations (heures supp, nuit, dimanche, jours fériés).
+   * Aucun montant fixe n'est ajouté à l'avance.
    */
   function pay(m, settings) {
     const rate = hourlyRate(settings);
     if (!(rate > 0)) return null;
-    const base = parseMoney(settings.baseSalary);
-    const mMin = monthlyContractMin(settings);
-    const monthly = base > 0 && mMin > 0;
     const pct = (k) => (Number(settings[k]) || 0) / 100;
     const amount = (min, factor) => round2((min / 60) * rate * factor);
-    const lines = [];
-    if (monthly) {
-      lines.push({ key: 'base', min: mMin, amount: round2(base) });
-      if (m.ot.t1) lines.push({ key: 'hc', min: m.ot.t1, pct: Number(settings.maj1) || 0, amount: amount(m.ot.t1, 1 + pct('maj1')) });
-      if (m.ot.t2) lines.push({ key: 'hc', min: m.ot.t2, pct: Number(settings.maj2) || 0, amount: amount(m.ot.t2, 1 + pct('maj2')) });
-    } else {
-      lines.push({ key: 'hours', min: m.total, amount: amount(m.total, 1) });
-      if (m.ot.t1 && pct('maj1')) lines.push({ key: 'hcMaj', min: m.ot.t1, pct: Number(settings.maj1), amount: amount(m.ot.t1, pct('maj1')) });
-      if (m.ot.t2 && pct('maj2')) lines.push({ key: 'hcMaj', min: m.ot.t2, pct: Number(settings.maj2), amount: amount(m.ot.t2, pct('maj2')) });
-    }
+    const lines = [{ key: 'hours', min: m.total, amount: amount(m.total, 1) }];
+    if (m.ot.t1 && pct('maj1')) lines.push({ key: 'hcMaj', min: m.ot.t1, pct: Number(settings.maj1), amount: amount(m.ot.t1, pct('maj1')) });
+    if (m.ot.t2 && pct('maj2')) lines.push({ key: 'hcMaj', min: m.ot.t2, pct: Number(settings.maj2), amount: amount(m.ot.t2, pct('maj2')) });
     [['night', 'nightMaj'], ['sunday', 'sundayMaj'], ['holiday', 'holidayMaj']].forEach(([k, s]) => {
       if (m[k] && pct(s)) lines.push({ key: k, min: m[k], pct: Number(settings[s]), amount: amount(m[k], pct(s)) });
     });
     const total = round2(lines.reduce((t, l) => t + l.amount, 0));
-    // Montant des heures supp (heures + majoration) et net estimé
-    const hcAmount = round2(lines.filter((l) => l.key === 'hc' || l.key === 'hcMaj').reduce((t, l) => t + l.amount, 0));
     const netPct = Number(settings.netPct) || 0;
-    return { rate, monthly, lines, total, hcAmount, net: netPct > 0 ? round2(total * netPct / 100) : null };
+    return {
+      rate, lines, total,
+      // Ce que rapportent les heures supp (heures payées + majoration)
+      hcAmount: overtimeAmount(m.ot, settings),
+      net: netPct > 0 ? round2(total * netPct / 100) : null,
+    };
   }
 
   /** Ce que rapportent des heures supp (heures payées + majoration). */

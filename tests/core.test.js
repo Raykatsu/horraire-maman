@@ -74,28 +74,20 @@ assert.deepStrictEqual(C.monthSummary(st.shifts, '2026-10', monthly).ot, { over:
 const small = Object.assign({}, s, { contractPeriod: 'month', contractHours: 90 });
 assert.deepStrictEqual(C.monthSummary(st.shifts, '2026-10', small).ot, { over: 690, t1: 540, t2: 150 });
 
-// Salaire sans salaire de base : heures × taux + majorations
+// Salaire calculé seulement avec les heures saisies : heures × taux + majorations
 const hourly = C.monthSummary(st.shifts, '2026-10', Object.assign({}, s, { baseSalary: '', rate: '12,00' })).pay;
-assert.ok(!hourly.monthly);
 assert.deepStrictEqual(hourly.lines.map((l) => [l.key, l.amount]), [
   ['hours', 1218], ['hcMaj', 2.2], ['hcMaj', 23.75], ['night', 129.6], ['sunday', 70.5],
 ]);
 assert.strictEqual(hourly.total, 1444.05);
-
-// Salaire mensualisé (exemple fictif : 1 000 € pour 80 h → 12,50 €/h)
-const mens = C.monthSummary(st.shifts, '2026-10', Object.assign({}, s, { baseSalary: '1000', monthlyHours: 80 })).pay;
-assert.ok(mens.monthly);
-assert.strictEqual(mens.rate, 12.5);
-assert.deepStrictEqual(mens.lines.map((l) => [l.key, l.amount]), [
-  ['base', 1000], ['hc', 25.21], ['hc', 123.7], ['night', 135], ['sunday', 73.44],
-]);
-assert.strictEqual(mens.total, 1357.35);
 assert.strictEqual(C.monthSummary([], '2026-10', Object.assign({}, s, { baseSalary: '' })).pay, null);
-// Avec le contrat (993,99 € pour 79 h) : octobre ≈ 1 353,68 € brut, dont 149,88 € d'heures supp
+// Avec le taux du contrat (993,99 € / 79 h ≈ 12,58 €/h)
 const real = C.monthSummary(st.shifts, '2026-10', s).pay;
-assert.strictEqual(real.total, 1353.68);
+assert.strictEqual(real.total, 1514.11);
 assert.strictEqual(real.hcAmount, 149.88);
-assert.strictEqual(real.net, 1055.87);
+assert.strictEqual(real.net, 1181.01);
+// Un mois sans heures saisies = 0 € (rien n'est compté à l'avance)
+assert.strictEqual(C.monthSummary(st.shifts, '2026-12', s).pay.total, 0);
 assert.strictEqual(C.overtimeAmount(C.weekSummary(st.shifts, '2026-10-05', s).ot, s), 149.88);
 
 // Mise à jour des téléphones qui avaient la 1re version (24 h provisoires)

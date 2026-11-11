@@ -35,7 +35,7 @@ Réglages par défaut (tous modifiables dans **Réglages**), d'après le contrat
 - **nuit** (21h → 6h) : **+20 %**, et repos compensateur de 2 % des heures de nuit ;
 - **dimanche** prévu au planning : **+25 %** (+100 % s'il est exceptionnel) ;
 - **jour férié** prévu : **+50 %** (+100 % s'il est exceptionnel) ; un dimanche férié compte seulement comme férié ;
-- **salaire brut estimé** : salaire de base du mois + heures supp avec leur majoration + majorations de nuit, du dimanche et des jours fériés. Sans salaire de base, l'appli fait heures × taux horaire.
+- **salaire brut estimé** : calculé uniquement avec les heures saisies : heures × taux horaire du contrat (salaire de base ÷ heures du mois) + majorations des heures supp, de nuit, du dimanche et des jours fériés. Rien n'est compté à l'avance.
 
 Le salaire n'est pas écrit dans le code : il se remplit dans **Réglages** et reste sur le téléphone.
 
